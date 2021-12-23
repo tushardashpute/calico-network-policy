@@ -2,27 +2,27 @@
 
 Assumption: You already have eks cluster deployed.
 
-# Steps 1:
+# Step 1:
 
-[root@ip-172-31-36-53 opt]# k create ns test1
+Create 2 namespaces test1 and test2 to deploy two nginx application and check the connectivity between them.
+
+# k create ns test1
 namespace/test1 created
-[root@ip-172-31-36-53 opt]# k create ns test2
+# k create ns test2
 namespace/test2 created
-[root@ip-172-31-36-53 opt]# 
-[root@ip-172-31-36-53 opt]# 
-[root@ip-172-31-36-53 opt]# k apply -f nginx-development.yaml -n test1
+
+# k apply -f nginx-development.yaml -n test1
 deployment.apps/nginx-deployment created
-[root@ip-172-31-36-53 opt]# k apply -f nginx-development.yaml -n test2
+# k apply -f nginx-development.yaml -n test2
 deployment.apps/nginx-deployment created
 
-[root@ip-172-31-36-53 opt]# k get pods -A -o wide|grep -i nginx 
-test1         nginx-deployment-66b6c48dd5-2njk8   1/1     Running   0          69s     192.168.62.179   ip-192-168-34-213.us-east-2.compute.internal   <none>           <none>
-test2         nginx-deployment-66b6c48dd5-kvl7s   1/1     Running   0          65s     192.168.31.206   ip-192-168-5-20.us-east-2.compute.internal     <none>           <none>
+# k get pods -A -o wide|grep -i nginx 
+test1         nginx-deployment-66b6c48dd5-2njk8   1/1     Running   0          69s     192.168.62.179   ip-192-168-34-213.us-east-2.compute.internal   <none>       
+test2         nginx-deployment-66b6c48dd5-kvl7s   1/1     Running   0          65s     192.168.31.206   ip-192-168-5-20.us-east-2.compute.internal     <none>       
 
-# k exec nginx-deployment-66b6c48dd5-2njk8 -n test1 -- curl 192.168.31.206
-  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                 Dload  Upload   Total   Spent    Left  Speed
-100   612  100   612    0     0   234k      0 --:--:-- --:--:-- --:--:--  298k
+Now to test the connectivity we will issue the curl command from each namespace nginx to call other namespace nginx pod IP.
+  
+ k exec nginx-deployment-66b6c48dd5-2njk8 -n test1 -- curl 192.168.31.206
 <!DOCTYPE html>
 <html>
 <head>
@@ -51,9 +51,6 @@ Commercial support is available at
 
   
   # k exec nginx-deployment-66b6c48dd5-kvl7s -n test2 -- curl 192.168.62.179
-  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                 Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0<!DOCTYPE html>
 <html>
 <head>
 <title>Welcome to nginx!</title>
