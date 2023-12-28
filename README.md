@@ -4,52 +4,112 @@ Assumption: You already have eks cluster deployed.
 
 **Step 1: Create sample microservice application**
 
-      git clone https://github.com/tushardashpute/microservice-kubernetes.git
-      
-      
-      kubectl get pods -A -o wide|grep -i nginx 
-      test1         nginx-deployment-66b6c48dd5-2njk8   1/1     Running   0          69s     192.168.62.179   ip-192-168-34-213.us-east-2.compute.internal   <none>       
-      test2         nginx-deployment-66b6c48dd5-kvl7s   1/1     Running   0          65s     192.168.31.206   ip-192-168-5-20.us-east-2.compute.internal     <none>       
+      Source Code for Microservice Application : https://github.com/tushardashpute/microservice-kubernetes.git
+ 
+      sh kubernetes-deploy.sh
 
-Now to test the connectivity we will issue the curl command from each namespace nginx to call other namespace nginx pod IP.
+            $ sh kubernetes-deploy.sh
+            deployment.apps/apache created
+            service/apache exposed
+            deployment.apps/catalog created
+            service/catalog exposed
+            deployment.apps/customer created
+            service/customer exposed
+            deployment.apps/order created
+            service/order exposed
   
+Now to test the connectivity, port-forward the svc appache and hit the customer service.
 
-kubectl exec nginx-deployment-66b6c48dd5-2njk8 -n test1 -- curl 192.168.31.206
+ kubectl port-forward svc/apache 80:80
 
-You will get output like <title>Welcome to nginx!</title>
+ Open the http://localhost in the browser
 
-  
-kubectl exec nginx-deployment-66b6c48dd5-kvl7s -n test2 -- curl 192.168.62.179
-  You will get output like <title>Welcome to nginx!</title>
-  
+ ![image](https://github.com/tushardashpute/calico-network-policy/assets/74225291/9b824090-8a3a-48d4-9206-6e48a17858af)
+
+ You can now navigate to any of the above available options, for example I am navigating to customer.
+
+ ![image](https://github.com/tushardashpute/calico-network-policy/assets/74225291/8e9e2209-0658-4445-96c0-681560a67a86)
+
  
  **Step 2: Install calico on eks cluster and again check the connetivity between pods in different namespaces.**
  
- Download the Calico networking manifest for the Kubernetes API datastore.
+Download the [Calico](https://docs.tigera.io/calico/latest/getting-started/kubernetes/self-managed-onprem/onpremises) networking manifest for the Kubernetes API datastore.
 
-curl https://docs.projectcalico.org/v3.10/manifests/calico.yaml -O
+- Install the operator on your cluster.
 
-  If you are using pod CIDR 192.168.0.0/16, skip to the next step. If you are using a different pod CIDR, use the following commands to set an environment variable called POD_CIDR containing your pod CIDR and replace 192.168.0.0/16 in the manifest with your pod CIDR.
+            kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/tigera-operator.yaml
+            
+- Download the custom resources necessary to configure Calico.
+
+            curl https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml -O
+            
+If you are using pod CIDR 192.168.0.0/16, skip to the next step. If you are using a different pod CIDR, use the following commands to set an environment variable called POD_CIDR containing your pod CIDR and replace 192.168.0.0/16 in the manifest with your pod CIDR.
 
 POD_CIDR="<your-pod-cidr>" \
-sed -i -e "s?192.168.0.0/16?$POD_CIDR?g" calico.yaml
+sed -i -e "s?192.168.0.0/16?$POD_CIDR?g" custom-resources.yaml
 Apply the manifest using the following command.
 
-kubectl apply -f calico.yaml
+- Create the manifest in order to install Calico.
 
-  If you wish to enforce application layer policies and secure workload-to-workload communications with mutual TLS authentication, continue to Enabling application layer policy (optional). 
-  
- kubectl set env daemonset/calico-node -n kube-system IP_AUTODETECTION_METHOD=can-reach=www.google.com
-daemonset.apps/calico-node env updated
-  
-        kubectl exec nginx-deployment-66b6c48dd5-2njk8 -n test1 -- curl 192.168.31.206
-      
-       You will get "curl: (7) Failed to connect to 192.168.31.206 port 80: No route to host"
-        
-        kubectl exec nginx-deployment-66b6c48dd5-kvl7s -n test2 -- curl 192.168.62.179
-      
-       You will get "curl: (7) Failed to connect to 192.168.62.179 port 80: No route to host"
+kubectl apply -f custom-resources.yaml
 
- **Step 3 : Create network policy on test1 ns to allow incoming trafic from ns test2.**
+- Verify Calico installation in your cluster.
+
+        watch kubectl get pods -n calico-system
+
+
+              Every 2s: kubectl get pods -n calico-system                                                                                               2023-12-28 17:23:31
+            
+            NAME                                       READY   STATUS    RESTARTS   AGE
+            calico-kube-controllers-5f5f8d5fb9-hj57z   1/1     Running   0          6h12m
+            calico-node-qsf5m                          1/1     Running   0          6h12m
+            calico-typha-759c4b8c47-cjdb8              1/1     Running   0          6h12m
+            csi-node-driver-f7tqz                      2/2     Running   0          6h12m
+
+
+ **Step 3 : Create network policy default deny on default ns**
   
-  
+            apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: default-deny
+            spec:
+              podSelector: {}
+              policyTypes:
+              - Ingress
+
+In this policy we are denying all ingress traffic coming to pods in default namespace.
+
+kubectl apply -f defautl_deny.yaml
+
+            $ kubectl apply -f default_deny.yaml
+            networkpolicy.networking.k8s.io/default-deny created
+
+now try to access the customer option again from UI, you will get below error.
+
+![image](https://github.com/tushardashpute/calico-network-policy/assets/74225291/5a834107-c7f4-49f8-8b65-c2844a9191f6)
+
+Step 4 : Create network policy to allow traffic from apache app to customer app
+
+            kind: NetworkPolicy
+            apiVersion: networking.k8s.io/v1
+            metadata:
+              name: customer-allow-prod
+            spec:
+              podSelector:
+                matchLabels:
+                  app: customer
+              ingress:
+              - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: default
+
+Here we are allowing trafic from all the pods in the default namespace to the pods with the lables "app: customer"
+
+            $ kubectl apply -f traffic_to_customer.yaml
+            networkpolicy.networking.k8s.io/customer-allow-prod created
+
+Now again try to access the customer page:
+
+![image](https://github.com/tushardashpute/calico-network-policy/assets/74225291/65329441-9521-42d4-af8e-b09a897eab0a)
