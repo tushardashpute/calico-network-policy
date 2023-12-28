@@ -2,18 +2,10 @@
 
 Assumption: You already have eks cluster deployed.
 
-**Step 1: Create 2 namespaces test1 and test2 to deploy two nginx application and check the connectivity between them.**
+**Step 1: Create sample microservice application**
 
-      kubectl create ns test1
-      namespace/test1 created
+      git clone https://github.com/tushardashpute/microservice-kubernetes.git
       
-      kubectl create ns test2
-      namespace/test2 created
-      
-      kubectl apply -f nginx-development.yaml -n test1
-      deployment.apps/nginx-deployment created
-      kubectl apply -f nginx-development.yaml -n test2
-      deployment.apps/nginx-deployment created
       
       kubectl get pods -A -o wide|grep -i nginx 
       test1         nginx-deployment-66b6c48dd5-2njk8   1/1     Running   0          69s     192.168.62.179   ip-192-168-34-213.us-east-2.compute.internal   <none>       
